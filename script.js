@@ -45,7 +45,7 @@ async function loadData() {
   const company = document.getElementById("companySelect").value;
 
   try {
-    const res = await fetch(`/api/mnav?period=1mo&interval=1d`);
+    const res = await fetch(`/api/mnav?period=7d&interval=1d`);
     const data = await res.json();
 
     console.log("API response:", data);
