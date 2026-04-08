@@ -3,11 +3,9 @@ let dashboardData = null;
 const summaryCache = {};
 
 async function fetchDashboardData() {
-  if (dashboardData) {
-    return dashboardData;
-  }
+  if (dashboardData) return dashboardData;
 
-  const res = await fetch(`/api/mnav`);
+  const res = await fetch("/api/mnav");
   const data = await res.json();
   dashboardData = data;
   return data;

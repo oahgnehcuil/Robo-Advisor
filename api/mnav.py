@@ -32,22 +32,59 @@ CACHE = {}
 CACHE_TTL = 1800  # 30 分鐘
 
 
-def normalize_index_to_timestamp(df: pd.DataFrame) -> pd.DataFrame:
+def safe_history(ticker: str, period: str, interval: str, retries: int = 3, sleep_sec: int = 2):
+    last_error = None
+
+    for _ in range(retries):
+        try:
+            df = yf.Ticker(ticker).history(period=period, interval=interval)
+            if not df.empty:
+                return df
+        except Exception as e:
+            last_error = e
+
+        time.sleep(sleep_sec)
+
+    if last_error:
+        print(f"[ERROR] {ticker}: {last_error}")
+    else:
+        print(f"[ERROR] {ticker}: empty history after retries")
+
+    return pd.DataFrame()
+
+
+def normalize_time_column(df: pd.DataFrame, time_col: str, interval: str) -> pd.DataFrame:
     df = df.copy()
-    df = df.reset_index()
+    ts = pd.to_datetime(df[time_col], utc=True).dt.tz_convert(None)
 
-    time_col = df.columns[0]
-    ts = pd.to_datetime(df[time_col], utc=True).dt.tz_convert(None).dt.floor("D")
+    if interval.endswith("h"):
+        ts = ts.dt.floor("h")
+    elif interval.endswith("m"):
+        ts = ts.dt.floor("min")
+    else:
+        ts = ts.dt.floor("D")
+
     df["timestamp"] = ts
-
     return df
 
 
-def build_company_result(company_key: str, stock_close_df: pd.DataFrame, btc_close_df: pd.DataFrame):
+def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: pd.DataFrame):
     cfg = COMPANIES[company_key]
+    ticker = cfg["ticker"]
 
-    stock_df = normalize_index_to_timestamp(stock_close_df)
-    btc_df = normalize_index_to_timestamp(btc_close_df)
+    stock_hist = safe_history(ticker, period, interval)
+
+    if stock_hist.empty:
+        return {"error": f"{ticker} history is empty"}
+
+    stock_df = stock_hist[["Close"]].reset_index()
+    btc_df = btc_hist[["Close"]].reset_index()
+
+    stock_time_col = stock_df.columns[0]
+    btc_time_col = btc_df.columns[0]
+
+    stock_df = normalize_time_column(stock_df, stock_time_col, interval)
+    btc_df = normalize_time_column(btc_df, btc_time_col, interval)
 
     stock_df = stock_df[["timestamp", "Close"]].rename(columns={"Close": "Close_STOCK"})
     btc_df = btc_df[["timestamp", "Close"]].rename(columns={"Close": "Close_BTC"})
@@ -55,12 +92,14 @@ def build_company_result(company_key: str, stock_close_df: pd.DataFrame, btc_clo
     stock_df = stock_df.sort_values("timestamp").drop_duplicates("timestamp")
     btc_df = btc_df.sort_values("timestamp").drop_duplicates("timestamp")
 
+    tolerance = pd.Timedelta("90min") if interval.endswith("h") else pd.Timedelta("1D")
+
     df = pd.merge_asof(
         stock_df,
         btc_df,
         on="timestamp",
         direction="nearest",
-        tolerance=pd.Timedelta("1D")
+        tolerance=tolerance
     ).dropna()
 
     if df.empty:
@@ -73,6 +112,8 @@ def build_company_result(company_key: str, stock_close_df: pd.DataFrame, btc_clo
     df["btcNav"] = df["Close_BTC"] * btc_holdings
     df["mnav"] = df["marketCapApprox"] / df["btcNav"]
 
+    time_fmt = "%Y-%m-%d" if interval.endswith("d") else "%Y-%m-%d %H:%M"
+
     result = []
     for _, row in df.iterrows():
         mnav_val = float(row["mnav"])
@@ -80,7 +121,7 @@ def build_company_result(company_key: str, stock_close_df: pd.DataFrame, btc_clo
             continue
 
         result.append({
-            "date": row["timestamp"].strftime("%Y-%m-%d"),
+            "date": row["timestamp"].strftime(time_fmt),
             "stock_close": round(float(row["Close_STOCK"]), 2),
             "btc_close": round(float(row["Close_BTC"]), 2),
             "market_cap_approx": round(float(row["marketCapApprox"]), 2),
@@ -109,59 +150,29 @@ def get_all_mnav(
     now = time.time()
 
     try:
-        # 先回新鮮 cache
         if cache_key in CACHE:
             cached_entry = CACHE[cache_key]
             if now - cached_entry["timestamp"] < CACHE_TTL:
                 return cached_entry["data"]
 
-        tickers = ["BTC-USD"] + [cfg["ticker"] for cfg in COMPANIES.values()]
+        btc_hist = safe_history("BTC-USD", period, interval)
 
-        raw = yf.download(
-            tickers=tickers,
-            period=period,
-            interval=interval,
-            group_by="ticker",
-            auto_adjust=False,
-            progress=False,
-            threads=False
-        )
-
-        if raw.empty:
-            # 如果有舊 cache，就回舊 cache，不要整個炸掉
+        if btc_hist.empty:
             if cache_key in CACHE:
-                stale_data = CACHE[cache_key]["data"]
+                stale_data = CACHE[cache_key]["data"].copy()
                 stale_data["cache_status"] = "stale"
+                stale_data["warning"] = "Used stale cache because BTC fetch failed."
                 return stale_data
 
-            return JSONResponse(status_code=500, content={"error": "Downloaded data is empty"})
+            return JSONResponse(
+                status_code=500,
+                content={"error": "BTC history is empty"}
+            )
 
         all_data = {}
-
-        btc_close_df = raw["BTC-USD"][["Close"]].dropna() if "BTC-USD" in raw.columns.levels[0] else pd.DataFrame()
-
-        if btc_close_df.empty:
-            if cache_key in CACHE:
-                stale_data = CACHE[cache_key]["data"]
-                stale_data["cache_status"] = "stale"
-                return stale_data
-
-            return JSONResponse(status_code=500, content={"error": "BTC history is empty"})
-
-        for company_key, cfg in COMPANIES.items():
-            ticker = cfg["ticker"]
-
-            if ticker not in raw.columns.levels[0]:
-                all_data[company_key] = {"error": f"{ticker} not found in download result"}
-                continue
-
-            stock_close_df = raw[ticker][["Close"]].dropna()
-
-            if stock_close_df.empty:
-                all_data[company_key] = {"error": f"{ticker} history is empty"}
-                continue
-
-            all_data[company_key] = build_company_result(company_key, stock_close_df, btc_close_df)
+        for company_key in COMPANIES.keys():
+            all_data[company_key] = fetch_company_data(company_key, period, interval, btc_hist)
+            time.sleep(1)
 
         result = {
             "indicator": "mNAV",
@@ -182,9 +193,8 @@ def get_all_mnav(
     except Exception as e:
         msg = str(e)
 
-        # 有舊 cache 就優先回舊資料
         if cache_key in CACHE:
-            stale_data = CACHE[cache_key]["data"]
+            stale_data = CACHE[cache_key]["data"].copy()
             stale_data["cache_status"] = "stale"
             stale_data["warning"] = "Used stale cache because live fetch failed."
             return stale_data
@@ -195,7 +205,10 @@ def get_all_mnav(
                 content={"error": "資料來源暫時限流，請稍後再試。"}
             )
 
-        return JSONResponse(status_code=500, content={"error": msg})
+        return JSONResponse(
+            status_code=500,
+            content={"error": msg}
+        )
 
 
 handler = app
