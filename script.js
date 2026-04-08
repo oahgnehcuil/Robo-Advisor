@@ -1,5 +1,17 @@
 let chartInstance = null;
+let dashboardData = null;
 const summaryCache = {};
+
+async function fetchDashboardData() {
+  if (dashboardData) {
+    return dashboardData;
+  }
+
+  const res = await fetch(`/api/mnav?period=1mo&interval=1d`);
+  const data = await res.json();
+  dashboardData = data;
+  return data;
+}
 
 async function loadSummary(companyData) {
   const summaryBox = document.getElementById("aiSummary");
@@ -41,14 +53,92 @@ async function loadSummary(companyData) {
   }
 }
 
+function renderCompany(companyData) {
+  const latest = companyData.latest;
+  const series = companyData.series;
+
+  document.getElementById("latestMnav").textContent = latest.mnav;
+  document.getElementById("latestStock").textContent = "$" + latest.stock_close.toLocaleString();
+  document.getElementById("latestBtc").textContent = "$" + latest.btc_close.toLocaleString();
+
+  const labels = series.map(x => x.date);
+  const mnavValues = series.map(x => x.mnav);
+  const stockValues = series.map(x => x.stock_close);
+
+  if (chartInstance) {
+    chartInstance.destroy();
+  }
+
+  chartInstance = new Chart(document.getElementById("mnavChart"), {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: `${companyData.company} mNAV`,
+          data: mnavValues,
+          yAxisID: "y1",
+          borderWidth: 2,
+          tension: 0.2,
+          fill: false
+        },
+        {
+          label: `${companyData.company} Stock Price`,
+          data: stockValues,
+          yAxisID: "y2",
+          borderWidth: 2,
+          tension: 0.2,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          display: true
+        }
+      },
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: "Date"
+          }
+        },
+        y1: {
+          type: "linear",
+          position: "left",
+          title: {
+            display: true,
+            text: "mNAV"
+          }
+        },
+        y2: {
+          type: "linear",
+          position: "right",
+          title: {
+            display: true,
+            text: "Stock Price"
+          },
+          grid: {
+            drawOnChartArea: false
+          }
+        }
+      }
+    }
+  });
+}
+
 async function loadData() {
   const company = document.getElementById("companySelect").value;
 
   try {
-    const res = await fetch(`/api/mnav?period=7d&interval=1d`);
-    const data = await res.json();
-
-    console.log("API response:", data);
+    const data = await fetchDashboardData();
 
     if (data.error) {
       document.getElementById("latestMnav").textContent = "N/A";
@@ -69,86 +159,9 @@ async function loadData() {
       return;
     }
 
-    const latest = companyData.latest;
-    const series = companyData.series;
-
-    document.getElementById("latestMnav").textContent = latest.mnav;
-    document.getElementById("latestStock").textContent = "$" + latest.stock_close.toLocaleString();
-    document.getElementById("latestBtc").textContent = "$" + latest.btc_close.toLocaleString();
-
-    const labels = series.map(x => x.date);
-    const mnavValues = series.map(x => x.mnav);
-    const stockValues = series.map(x => x.stock_close);
-
-    if (chartInstance) {
-      chartInstance.destroy();
-    }
-
-    chartInstance = new Chart(document.getElementById("mnavChart"), {
-      type: "line",
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: `${companyData.company} mNAV`,
-            data: mnavValues,
-            yAxisID: "y1",
-            borderWidth: 2,
-            tension: 0.2,
-            fill: false
-          },
-          {
-            label: `${companyData.company} Stock Price`,
-            data: stockValues,
-            yAxisID: "y2",
-            borderWidth: 2,
-            tension: 0.2,
-            fill: false
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        interaction: {
-          mode: "index",
-          intersect: false
-        },
-        plugins: {
-          legend: {
-            display: true
-          }
-        },
-        scales: {
-          x: {
-            title: {
-              display: true,
-              text: "Time"
-            }
-          },
-          y1: {
-            type: "linear",
-            position: "left",
-            title: {
-              display: true,
-              text: "mNAV"
-            }
-          },
-          y2: {
-            type: "linear",
-            position: "right",
-            title: {
-              display: true,
-              text: "Stock Price"
-            },
-            grid: {
-              drawOnChartArea: false
-            }
-          }
-        }
-      }
-    });
-
+    renderCompany(companyData);
     loadSummary(companyData);
+
   } catch (err) {
     document.getElementById("latestMnav").textContent = "N/A";
     document.getElementById("latestStock").textContent = "N/A";

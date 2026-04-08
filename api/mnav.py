@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 import yfinance as yf
 import pandas as pd
 import math
+import time
 
 app = FastAPI()
 
@@ -27,6 +28,8 @@ COMPANIES = {
     }
 }
 
+CACHE = {}
+CACHE_TTL = 1800  # 30 分鐘
 
 def normalize_time_column(df: pd.DataFrame, time_col: str, interval: str) -> pd.DataFrame:
     df = df.copy()
@@ -42,16 +45,13 @@ def normalize_time_column(df: pd.DataFrame, time_col: str, interval: str) -> pd.
     df["timestamp"] = ts
     return df
 
-
 def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: pd.DataFrame):
     cfg = COMPANIES[company_key]
     stock = yf.Ticker(cfg["ticker"])
     stock_hist = stock.history(period=period, interval=interval)
 
     if stock_hist.empty:
-        return {
-            "error": f"{company_key} history is empty"
-        }
+        return {"error": f"{company_key} history is empty"}
 
     stock_df = stock_hist[["Close"]].reset_index()
     btc_df = btc_hist[["Close"]].reset_index()
@@ -68,7 +68,6 @@ def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: p
     stock_df = stock_df.sort_values("timestamp").drop_duplicates("timestamp")
     btc_df = btc_df.sort_values("timestamp").drop_duplicates("timestamp")
 
-    # 用最近時間配對，不要求完全相同
     tolerance = pd.Timedelta("90min") if interval.endswith("h") else pd.Timedelta("1D")
 
     df = pd.merge_asof(
@@ -80,11 +79,7 @@ def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: p
     ).dropna()
 
     if df.empty:
-        return {
-            "error": "Merged dataframe is empty",
-            "stock_sample_times": stock_df["timestamp"].astype(str).head(5).tolist(),
-            "btc_sample_times": btc_df["timestamp"].astype(str).head(5).tolist()
-        }
+        return {"error": "Merged dataframe is empty"}
 
     shares_outstanding = cfg["shares_outstanding"]
     btc_holdings = cfg["btc_holdings"]
@@ -93,10 +88,7 @@ def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: p
     df["btcNav"] = df["Close_BTC"] * btc_holdings
     df["mnav"] = df["marketCapApprox"] / df["btcNav"]
 
-    if interval.endswith("h") or interval.endswith("m"):
-        time_fmt = "%Y-%m-%d %H:%M"
-    else:
-        time_fmt = "%Y-%m-%d"
+    time_fmt = "%Y-%m-%d" if interval.endswith("d") else "%Y-%m-%d %H:%M"
 
     result = []
     for _, row in df.iterrows():
@@ -114,42 +106,41 @@ def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: p
         })
 
     if not result:
-        return {
-            "error": "No valid rows after calculation"
-        }
+        return {"error": "No valid rows after calculation"}
 
     return {
         "company": company_key,
         "company_name": cfg["name"],
         "ticker": cfg["ticker"],
-        "shares_outstanding_assumption": shares_outstanding,
-        "btc_holdings_assumption": btc_holdings,
         "latest": result[-1],
         "series": result
     }
 
-
 @app.get("/api/mnav")
 def get_all_mnav(
-    period: str = Query(default="7d"),
-    interval: str = Query(default="1h")
+    period: str = Query(default="1mo"),
+    interval: str = Query(default="1d")
 ):
     try:
+        cache_key = f"{period}_{interval}"
+        now = time.time()
+
+        if cache_key in CACHE:
+            cached_entry = CACHE[cache_key]
+            if now - cached_entry["timestamp"] < CACHE_TTL:
+                return cached_entry["data"]
+
         btc = yf.Ticker("BTC-USD")
         btc_hist = btc.history(period=period, interval=interval)
 
         if btc_hist.empty:
-            return JSONResponse(
-                status_code=500,
-                content={"error": "BTC history is empty"}
-            )
+            return JSONResponse(status_code=500, content={"error": "BTC history is empty"})
 
         all_data = {}
-
         for company_key in COMPANIES.keys():
             all_data[company_key] = fetch_company_data(company_key, period, interval, btc_hist)
 
-        return {
+        result = {
             "indicator": "mNAV",
             "period": period,
             "interval": interval,
@@ -157,11 +148,20 @@ def get_all_mnav(
             "available_companies": list(COMPANIES.keys())
         }
 
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e)}
-        )
+        CACHE[cache_key] = {
+            "timestamp": now,
+            "data": result
+        }
 
+        return result
+
+    except Exception as e:
+        msg = str(e)
+        if "Too Many Requests" in msg or "Rate limited" in msg or "429" in msg:
+            return JSONResponse(
+                status_code=429,
+                content={"error": "資料來源暫時限流，請稍後再試。"}
+            )
+        return JSONResponse(status_code=500, content={"error": msg})
 
 handler = app
