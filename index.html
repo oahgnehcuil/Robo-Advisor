@@ -3,17 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DAT.co Indicator Dashboard</title>
+  <title>DAT.co Dashboard</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="container">
     <h1>DAT.co Indicator Dashboard</h1>
-    <p class="subtitle">Tracking MSTR mNAV over time</p>
+    <p class="subtitle">MSTR mNAV monitor</p>
+
+    <div class="grid">
+      <div class="card">
+        <div class="label">Latest mNAV</div>
+        <div id="latestMnav" class="value">Loading...</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Latest MSTR Close</div>
+        <div id="latestMstr" class="value">Loading...</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Latest BTC Close</div>
+        <div id="latestBtc" class="value">Loading...</div>
+      </div>
+    </div>
+
+    <div class="card chart-card">
+      <canvas id="mnavChart"></canvas>
+    </div>
 
     <div class="card">
-      <canvas id="mnavChart"></canvas>
+      <h2>Interpretation</h2>
+      <p id="summary">Loading summary...</p>
     </div>
   </div>
 
