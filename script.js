@@ -2,6 +2,13 @@ let chartInstance = null;
 
 async function loadSummary(companyData) {
   const summaryBox = document.getElementById("aiSummary");
+  const cacheKey = `${companyData.company}-${companyData.latest.date}`;
+
+  if (summaryCache[cacheKey]) {
+    summaryBox.textContent = summaryCache[cacheKey];
+    return;
+  }
+
   summaryBox.textContent = "Generating AI summary...";
 
   try {
@@ -21,13 +28,15 @@ async function loadSummary(companyData) {
     const data = await res.json();
 
     if (data.error) {
-      summaryBox.textContent = "AI 摘要失敗：" + data.error;
+      summaryBox.textContent = "AI 摘要暫時無法取得：" + data.error;
       return;
     }
 
-    summaryBox.textContent = data.summary || "No summary returned.";
+    const summary = data.summary || "No summary returned.";
+    summaryCache[cacheKey] = summary;
+    summaryBox.textContent = summary;
   } catch (err) {
-    summaryBox.textContent = "AI 摘要失敗：" + err.message;
+    summaryBox.textContent = "AI 摘要暫時無法取得：" + err.message;
   }
 }
 
