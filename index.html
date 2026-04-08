@@ -4,14 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DAT.co Indicator Dashboard</title>
+
+  <!-- CSS -->
   <link rel="stylesheet" href="style.css" />
+
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <body>
   <div class="container">
     <h1>DAT.co Indicator Dashboard</h1>
-    <p class="subtitle">Monitor mNAV and stock price for Bitcoin treasury-related companies</p>
+    <p class="subtitle">
+      Monitor mNAV and stock price for Bitcoin treasury-related companies
+    </p>
 
+    <!-- 公司選單 -->
     <div class="controls card">
       <label for="companySelect">Company:</label>
       <select id="companySelect">
@@ -21,6 +29,7 @@
       </select>
     </div>
 
+    <!-- 指標卡片 -->
     <div class="grid">
       <div class="card">
         <div class="label">Latest mNAV</div>
@@ -38,16 +47,39 @@
       </div>
     </div>
 
+    <!-- 圖表 -->
     <div class="card chart-card">
       <canvas id="mnavChart"></canvas>
     </div>
 
+    <!-- AI 問答區 -->
+    <div class="card">
+      <h2>Ask AI</h2>
+      <p>
+        Ask questions about mNAV, stock price, BTC relationship, or company comparison.
+      </p>
+
+      <textarea
+        id="questionInput"
+        rows="4"
+        placeholder="Example: Which company has the highest mNAV and what does it imply?"
+      ></textarea>
+
+      <button id="askButton">Ask Gemini</button>
+
+      <div id="aiAnswer" class="ai-answer">
+        No question asked yet.
+      </div>
+    </div>
+
+    <!-- 解釋區 -->
     <div class="card">
       <h2>Interpretation</h2>
       <p id="summary">Loading summary...</p>
     </div>
   </div>
 
+  <!-- JS -->
   <script src="script.js"></script>
 </body>
 </html>

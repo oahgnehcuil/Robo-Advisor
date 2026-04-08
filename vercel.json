@@ -1,6 +1,7 @@
 {
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/mnav.py" },
+    { "src": "/api/mnav", "dest": "/api/mnav.py" },
+    { "src": "/api/ask", "dest": "/api/ask.py" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
