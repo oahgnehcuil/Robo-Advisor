@@ -118,7 +118,7 @@ def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: p
 
 @app.get("/api/mnav")
 def get_all_mnav(
-    period: str = Query(default="14d"),
+    period: str = Query(default="8d"),
     interval: str = Query(default="1d")
 ):
     try:

@@ -7,7 +7,7 @@ async function fetchDashboardData() {
     return dashboardData;
   }
 
-  const res = await fetch(`/api/mnav?period=14d&interval=1d`);
+  const res = await fetch(`/api/mnav?period=8d&interval=1d`);
   const data = await res.json();
   dashboardData = data;
   return data;
