@@ -1,5 +1,15 @@
 async function loadData() {
   const company = document.getElementById("companySelect").value;
+  const companyData = data.companies[company];
+
+  if (!companyData || companyData.error) {
+    document.getElementById("summary").textContent =
+      "資料載入失敗：" + (companyData ? companyData.error : "No company data");
+    return;
+  }
+
+  const latest = companyData.latest;
+  const series = companyData.series;
 
   try {
     const res = await fetch(`/api/mnav?period=7d&interval=1h`);
