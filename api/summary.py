@@ -17,33 +17,29 @@ def generate_summary(req: SummaryRequest):
     try:
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            return JSONResponse(
-                status_code=500,
-                content={"error": "Missing GEMINI_API_KEY"}
-            )
+            return {
+                "summary": "AI 摘要目前未啟用，因為缺少 GEMINI_API_KEY。"
+            }
 
         client = genai.Client(api_key=api_key)
 
         trimmed_series = req.series[-24:] if len(req.series) > 24 else req.series
 
         prompt = f"""
-You are a financial dashboard assistant.
+你是一個金融 dashboard 助理。
 
-Based only on the provided data, write a concise dashboard summary in Traditional Chinese.
-Do not mention missing tools or APIs.
-Do not ask follow-up questions.
-Do not use markdown headings.
+請只根據提供的資料，用繁體中文寫一段簡短摘要。
+內容包含：
+1. 最近 mNAV 與股價的變化
+2. 這可能代表的意義
+3. 一句保守提醒
 
-Please provide:
-1. A short summary of the recent movement in mNAV and stock price
-2. A short interpretation of what the change may imply
-3. A short caution about uncertainty
+不要使用 markdown 標題，不要條列太多點，直接寫成簡潔自然的摘要。
 
-Data:
-Company name: {req.company_name}
-Ticker: {req.ticker}
-Latest data: {req.latest}
-Recent series: {trimmed_series}
+公司：{req.company_name}
+Ticker：{req.ticker}
+最新資料：{req.latest}
+最近資料：{trimmed_series}
 """
 
         response = client.models.generate_content(
@@ -54,9 +50,16 @@ Recent series: {trimmed_series}
         return {"summary": response.text}
 
     except Exception as e:
+        msg = str(e)
+
+        if "429" in msg or "Too Many Requests" in msg or "RESOURCE_EXHAUSTED" in msg:
+            return {
+                "summary": "AI 摘要暫時無法取得，因為目前觸發 Gemini rate limit。請稍後再試。"
+            }
+
         return JSONResponse(
             status_code=500,
-            content={"error": str(e)}
+            content={"error": msg}
         )
 
 handler = app

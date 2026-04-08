@@ -1,4 +1,5 @@
 let chartInstance = null;
+const summaryCache = {};
 
 async function loadSummary(companyData) {
   const summaryBox = document.getElementById("aiSummary");
@@ -147,8 +148,7 @@ async function loadData() {
       }
     });
 
-    await loadSummary(companyData);
-
+    loadSummary(companyData);
   } catch (err) {
     document.getElementById("latestMnav").textContent = "N/A";
     document.getElementById("latestStock").textContent = "N/A";
