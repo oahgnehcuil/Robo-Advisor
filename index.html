@@ -3,14 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DAT.co Dashboard</title>
+  <title>DAT.co Indicator Dashboard</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="container">
     <h1>DAT.co Indicator Dashboard</h1>
-    <p class="subtitle">MSTR mNAV monitor</p>
+    <p class="subtitle">Monitor mNAV and stock price for Bitcoin treasury-related companies</p>
+
+    <div class="controls card">
+      <label for="companySelect">Company:</label>
+      <select id="companySelect">
+        <option value="MSTR">MSTR</option>
+        <option value="COIN">COIN (Coinbase)</option>
+        <option value="3350.T">3350.T (Metaplanet)</option>
+      </select>
+    </div>
 
     <div class="grid">
       <div class="card">
@@ -19,8 +28,8 @@
       </div>
 
       <div class="card">
-        <div class="label">Latest MSTR Close</div>
-        <div id="latestMstr" class="value">Loading...</div>
+        <div class="label">Latest Stock Close</div>
+        <div id="latestStock" class="value">Loading...</div>
       </div>
 
       <div class="card">

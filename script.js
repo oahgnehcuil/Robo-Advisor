@@ -1,15 +1,7 @@
+let chartInstance = null;
+
 async function loadData() {
   const company = document.getElementById("companySelect").value;
-  const companyData = data.companies[company];
-
-  if (!companyData || companyData.error) {
-    document.getElementById("summary").textContent =
-      "資料載入失敗：" + (companyData ? companyData.error : "No company data");
-    return;
-  }
-
-  const latest = companyData.latest;
-  const series = companyData.series;
 
   try {
     const res = await fetch(`/api/mnav?period=7d&interval=1h`);
@@ -19,7 +11,7 @@ async function loadData() {
 
     if (data.error) {
       document.getElementById("latestMnav").textContent = "N/A";
-      document.getElementById("latestMstr").textContent = "N/A";
+      document.getElementById("latestStock").textContent = "N/A";
       document.getElementById("latestBtc").textContent = "N/A";
       document.getElementById("summary").textContent = "資料載入失敗：" + data.error;
       return;
@@ -29,7 +21,7 @@ async function loadData() {
 
     if (!companyData || companyData.error) {
       document.getElementById("latestMnav").textContent = "N/A";
-      document.getElementById("latestMstr").textContent = "N/A";
+      document.getElementById("latestStock").textContent = "N/A";
       document.getElementById("latestBtc").textContent = "N/A";
       document.getElementById("summary").textContent =
         "公司資料載入失敗：" + (companyData ? companyData.error : "No company data");
@@ -40,7 +32,7 @@ async function loadData() {
     const series = companyData.series;
 
     document.getElementById("latestMnav").textContent = latest.mnav;
-    document.getElementById("latestMstr").textContent = "$" + latest.stock_close.toLocaleString();
+    document.getElementById("latestStock").textContent = "$" + latest.stock_close.toLocaleString();
     document.getElementById("latestBtc").textContent = "$" + latest.btc_close.toLocaleString();
 
     const labels = series.map(x => x.date);
@@ -80,7 +72,18 @@ async function loadData() {
           mode: "index",
           intersect: false
         },
+        plugins: {
+          legend: {
+            display: true
+          }
+        },
         scales: {
+          x: {
+            title: {
+              display: true,
+              text: "Time"
+            }
+          },
           y1: {
             type: "linear",
             position: "left",
@@ -104,15 +107,29 @@ async function loadData() {
       }
     });
 
+    const first = mnavValues[0];
+    const last = mnavValues[mnavValues.length - 1];
+
+    let trendText = "";
+    if (last > first) {
+      trendText = `${companyData.company_name} 的 mNAV 在這段期間整體上升，代表市場給予其相對於所持數位資產價值的溢價提高。`;
+    } else if (last < first) {
+      trendText = `${companyData.company_name} 的 mNAV 在這段期間整體下降，代表市場溢價收斂。`;
+    } else {
+      trendText = `${companyData.company_name} 的 mNAV 在這段期間大致持平。`;
+    }
+
     document.getElementById("summary").textContent =
-      `${companyData.company_name} 最新股價為 ${latest.stock_close}，最新 mNAV 為 ${latest.mnav}。`;
+      `${trendText} 最新股價為 ${latest.stock_close}，最新 mNAV 為 ${latest.mnav}。`;
 
   } catch (err) {
     document.getElementById("latestMnav").textContent = "N/A";
-    document.getElementById("latestMstr").textContent = "N/A";
+    document.getElementById("latestStock").textContent = "N/A";
     document.getElementById("latestBtc").textContent = "N/A";
     document.getElementById("summary").textContent = "載入失敗：" + err.message;
   }
 }
+
+document.getElementById("companySelect").addEventListener("change", loadData);
 
 loadData();
