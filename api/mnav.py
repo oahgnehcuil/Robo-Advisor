@@ -13,8 +13,8 @@ def get_mnav():
         mstr = yf.Ticker("MSTR")
         btc = yf.Ticker("BTC-USD")
 
-        mstr_hist = mstr.history(period="6mo", interval="1d")
-        btc_hist = btc.history(period="6mo", interval="1d")
+        mstr_hist = mstr.history(period="7d", interval="1h")
+        btc_hist = btc.history(period="7d", interval="1h")
 
         if mstr_hist.empty:
             return JSONResponse(
