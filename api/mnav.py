@@ -2,49 +2,60 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 import yfinance as yf
 import pandas as pd
-from math import isnan
+import math
 
 app = FastAPI()
+
 
 @app.get("/api/mnav")
 def get_mnav():
     try:
-        # 抓歷史資料
+        # 抓歷史價格
         mstr = yf.Ticker("MSTR")
         btc = yf.Ticker("BTC-USD")
 
-        mstr_hist = mstr.history(period="6mo")[["Close"]]
-        btc_hist = btc.history(period="6mo")[["Close"]]
+        mstr_hist = mstr.history(period="6mo", interval="1d")
+        btc_hist = btc.history(period="6mo", interval="1d")
 
-        if mstr_hist.empty or btc_hist.empty:
+        if mstr_hist.empty:
             return JSONResponse(
                 status_code=500,
-                content={"error": "Failed to fetch data from yfinance"}
+                content={"error": "MSTR history is empty"}
             )
+
+        if btc_hist.empty:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "BTC history is empty"}
+            )
+
+        # 只取收盤價
+        mstr_hist = mstr_hist[["Close"]].rename(columns={"Close": "Close_MSTR"})
+        btc_hist = btc_hist[["Close"]].rename(columns={"Close": "Close_BTC"})
 
         # 對齊日期
-        df = mstr_hist.join(btc_hist, lsuffix="_MSTR", rsuffix="_BTC").dropna()
+        df = mstr_hist.join(btc_hist, how="inner").dropna()
 
-        # 先用固定參數，之後你可以改
-        BTC_HOLDINGS = 214400
-
-        info = mstr.info
-        shares_outstanding = info.get("sharesOutstanding")
-
-        if not shares_outstanding:
+        if df.empty:
             return JSONResponse(
                 status_code=500,
-                content={"error": "sharesOutstanding not found"}
+                content={"error": "Joined dataframe is empty"}
             )
 
-        df["marketCapApprox"] = df["Close_MSTR"] * shares_outstanding
+        # 先用固定假設值，讓網站先穩定跑起來
+        SHARES_OUTSTANDING = 199000000
+        BTC_HOLDINGS = 214400
+
+        # 計算
+        df["marketCapApprox"] = df["Close_MSTR"] * SHARES_OUTSTANDING
         df["btcNav"] = df["Close_BTC"] * BTC_HOLDINGS
         df["mnav"] = df["marketCapApprox"] / df["btcNav"]
 
         result = []
         for idx, row in df.iterrows():
             mnav_val = float(row["mnav"])
-            if isnan(mnav_val):
+
+            if math.isnan(mnav_val) or math.isinf(mnav_val):
                 continue
 
             result.append({
@@ -56,13 +67,18 @@ def get_mnav():
                 "mnav": round(mnav_val, 4)
             })
 
-        latest = result[-1] if result else None
+        if not result:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "No valid rows after calculation"}
+            )
 
         return {
             "indicator": "mNAV",
             "company": "MSTR",
+            "shares_outstanding_assumption": SHARES_OUTSTANDING,
             "btc_holdings_assumption": BTC_HOLDINGS,
-            "latest": latest,
+            "latest": result[-1],
             "series": result
         }
 
@@ -72,5 +88,5 @@ def get_mnav():
             content={"error": str(e)}
         )
 
-# 給 Vercel 用
+
 handler = app
