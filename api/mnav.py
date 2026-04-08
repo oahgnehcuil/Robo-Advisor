@@ -28,6 +28,21 @@ COMPANIES = {
 }
 
 
+def normalize_time_column(df: pd.DataFrame, time_col: str, interval: str) -> pd.DataFrame:
+    df = df.copy()
+    ts = pd.to_datetime(df[time_col], utc=True).dt.tz_convert(None)
+
+    if interval.endswith("h"):
+        ts = ts.dt.floor("h")
+    elif interval.endswith("m"):
+        ts = ts.dt.floor("min")
+    else:
+        ts = ts.dt.floor("D")
+
+    df["timestamp"] = ts
+    return df
+
+
 def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: pd.DataFrame):
     cfg = COMPANIES[company_key]
     stock = yf.Ticker(cfg["ticker"])
@@ -41,27 +56,34 @@ def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: p
     stock_df = stock_hist[["Close"]].reset_index()
     btc_df = btc_hist[["Close"]].reset_index()
 
-    stock_date_col = stock_df.columns[0]
-    btc_date_col = btc_df.columns[0]
+    stock_time_col = stock_df.columns[0]
+    btc_time_col = btc_df.columns[0]
 
-    if interval.endswith("h") or interval.endswith("m"):
-        fmt = "%Y-%m-%d %H:%M"
-    else:
-        fmt = "%Y-%m-%d"
+    stock_df = normalize_time_column(stock_df, stock_time_col, interval)
+    btc_df = normalize_time_column(btc_df, btc_time_col, interval)
 
-    stock_df["date"] = pd.to_datetime(stock_df[stock_date_col]).dt.strftime(fmt)
-    btc_df["date"] = pd.to_datetime(btc_df[btc_date_col]).dt.strftime(fmt)
+    stock_df = stock_df[["timestamp", "Close"]].rename(columns={"Close": "Close_STOCK"})
+    btc_df = btc_df[["timestamp", "Close"]].rename(columns={"Close": "Close_BTC"})
 
-    stock_df = stock_df[["date", "Close"]].rename(columns={"Close": "Close_STOCK"})
-    btc_df = btc_df[["date", "Close"]].rename(columns={"Close": "Close_BTC"})
+    stock_df = stock_df.sort_values("timestamp").drop_duplicates("timestamp")
+    btc_df = btc_df.sort_values("timestamp").drop_duplicates("timestamp")
 
-    df = pd.merge(stock_df, btc_df, on="date", how="inner").dropna()
+    # 用最近時間配對，不要求完全相同
+    tolerance = pd.Timedelta("90min") if interval.endswith("h") else pd.Timedelta("1D")
+
+    df = pd.merge_asof(
+        stock_df,
+        btc_df,
+        on="timestamp",
+        direction="nearest",
+        tolerance=tolerance
+    ).dropna()
 
     if df.empty:
         return {
             "error": "Merged dataframe is empty",
-            "stock_sample_dates": stock_df["date"].head(5).tolist(),
-            "btc_sample_dates": btc_df["date"].head(5).tolist()
+            "stock_sample_times": stock_df["timestamp"].astype(str).head(5).tolist(),
+            "btc_sample_times": btc_df["timestamp"].astype(str).head(5).tolist()
         }
 
     shares_outstanding = cfg["shares_outstanding"]
@@ -71,6 +93,11 @@ def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: p
     df["btcNav"] = df["Close_BTC"] * btc_holdings
     df["mnav"] = df["marketCapApprox"] / df["btcNav"]
 
+    if interval.endswith("h") or interval.endswith("m"):
+        time_fmt = "%Y-%m-%d %H:%M"
+    else:
+        time_fmt = "%Y-%m-%d"
+
     result = []
     for _, row in df.iterrows():
         mnav_val = float(row["mnav"])
@@ -78,7 +105,7 @@ def fetch_company_data(company_key: str, period: str, interval: str, btc_hist: p
             continue
 
         result.append({
-            "date": row["date"],
+            "date": row["timestamp"].strftime(time_fmt),
             "stock_close": round(float(row["Close_STOCK"]), 2),
             "btc_close": round(float(row["Close_BTC"]), 2),
             "market_cap_approx": round(float(row["marketCapApprox"]), 2),
