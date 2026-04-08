@@ -1,5 +1,36 @@
 let chartInstance = null;
 
+async function loadSummary(companyData) {
+  const summaryBox = document.getElementById("aiSummary");
+  summaryBox.textContent = "Generating AI summary...";
+
+  try {
+    const res = await fetch("/api/summary", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        company_name: companyData.company_name,
+        ticker: companyData.ticker,
+        latest: companyData.latest,
+        series: companyData.series
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.error) {
+      summaryBox.textContent = "AI 摘要失敗：" + data.error;
+      return;
+    }
+
+    summaryBox.textContent = data.summary || "No summary returned.";
+  } catch (err) {
+    summaryBox.textContent = "AI 摘要失敗：" + err.message;
+  }
+}
+
 async function loadData() {
   const company = document.getElementById("companySelect").value;
 
@@ -13,7 +44,7 @@ async function loadData() {
       document.getElementById("latestMnav").textContent = "N/A";
       document.getElementById("latestStock").textContent = "N/A";
       document.getElementById("latestBtc").textContent = "N/A";
-      document.getElementById("summary").textContent = "資料載入失敗：" + data.error;
+      document.getElementById("aiSummary").textContent = "資料載入失敗：" + data.error;
       return;
     }
 
@@ -23,7 +54,7 @@ async function loadData() {
       document.getElementById("latestMnav").textContent = "N/A";
       document.getElementById("latestStock").textContent = "N/A";
       document.getElementById("latestBtc").textContent = "N/A";
-      document.getElementById("summary").textContent =
+      document.getElementById("aiSummary").textContent =
         "公司資料載入失敗：" + (companyData ? companyData.error : "No company data");
       return;
     }
@@ -107,68 +138,16 @@ async function loadData() {
       }
     });
 
-    const first = mnavValues[0];
-    const last = mnavValues[mnavValues.length - 1];
-
-    let trendText = "";
-    if (last > first) {
-      trendText = `${companyData.company_name} 的 mNAV 在這段期間整體上升，代表市場給予其相對於所持數位資產價值的溢價提高。`;
-    } else if (last < first) {
-      trendText = `${companyData.company_name} 的 mNAV 在這段期間整體下降，代表市場溢價收斂。`;
-    } else {
-      trendText = `${companyData.company_name} 的 mNAV 在這段期間大致持平。`;
-    }
-
-    document.getElementById("summary").textContent =
-      `${trendText} 最新股價為 ${latest.stock_close}，最新 mNAV 為 ${latest.mnav}。`;
+    await loadSummary(companyData);
 
   } catch (err) {
     document.getElementById("latestMnav").textContent = "N/A";
     document.getElementById("latestStock").textContent = "N/A";
     document.getElementById("latestBtc").textContent = "N/A";
-    document.getElementById("summary").textContent = "載入失敗：" + err.message;
+    document.getElementById("aiSummary").textContent = "載入失敗：" + err.message;
   }
 }
 
-async function askGemini() {
-  const question = document.getElementById("questionInput").value.trim();
-  const answerBox = document.getElementById("aiAnswer");
-
-  if (!question) {
-    answerBox.textContent = "請先輸入問題";
-    return;
-  }
-
-  answerBox.textContent = "Thinking...";
-
-  try {
-    const res = await fetch("/api/ask", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        question: question,
-        period: "7d",
-        interval: "1h"
-      })
-    });
-
-    const data = await res.json();
-
-    if (data.error) {
-      answerBox.textContent = "AI 回答失敗：" + data.error;
-      return;
-    }
-
-    answerBox.textContent = data.answer || "No answer returned.";
-
-  } catch (err) {
-    answerBox.textContent = "AI 回答失敗：" + err.message;
-  }
-}
-
-document.getElementById("askButton").addEventListener("click", askGemini);
 document.getElementById("companySelect").addEventListener("change", loadData);
 
 loadData();
