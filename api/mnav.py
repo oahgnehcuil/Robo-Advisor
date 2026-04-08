@@ -10,7 +10,6 @@ app = FastAPI()
 @app.get("/api/mnav")
 def get_mnav():
     try:
-        # 抓歷史價格
         mstr = yf.Ticker("MSTR")
         btc = yf.Ticker("BTC-USD")
 
@@ -29,37 +28,51 @@ def get_mnav():
                 content={"error": "BTC history is empty"}
             )
 
-        # 只取收盤價
-        mstr_hist = mstr_hist[["Close"]].rename(columns={"Close": "Close_MSTR"})
-        btc_hist = btc_hist[["Close"]].rename(columns={"Close": "Close_BTC"})
+        # 只保留 Close，並把 index 轉成 date 欄位
+        mstr_df = mstr_hist[["Close"]].reset_index()
+        btc_df = btc_hist[["Close"]].reset_index()
 
-        # 對齊日期
-        df = mstr_hist.join(btc_hist, how="inner").dropna()
+        # 找出日期欄位名稱（通常會是 Date 或 Datetime）
+        mstr_date_col = mstr_df.columns[0]
+        btc_date_col = btc_df.columns[0]
+
+        # 轉成 yyyy-mm-dd 字串，避免時區/時間戳對不起來
+        mstr_df["date"] = pd.to_datetime(mstr_df[mstr_date_col]).dt.strftime("%Y-%m-%d")
+        btc_df["date"] = pd.to_datetime(btc_df[btc_date_col]).dt.strftime("%Y-%m-%d")
+
+        mstr_df = mstr_df[["date", "Close"]].rename(columns={"Close": "Close_MSTR"})
+        btc_df = btc_df[["date", "Close"]].rename(columns={"Close": "Close_BTC"})
+
+        # 用 date 合併，不要直接 join index
+        df = pd.merge(mstr_df, btc_df, on="date", how="inner").dropna()
 
         if df.empty:
             return JSONResponse(
                 status_code=500,
-                content={"error": "Joined dataframe is empty"}
+                content={
+                    "error": "Merged dataframe is empty",
+                    "mstr_sample_dates": mstr_df["date"].head(5).tolist(),
+                    "btc_sample_dates": btc_df["date"].head(5).tolist()
+                }
             )
 
-        # 先用固定假設值，讓網站先穩定跑起來
+        # 先用固定假設值，讓系統穩定跑
         SHARES_OUTSTANDING = 199000000
         BTC_HOLDINGS = 214400
 
-        # 計算
         df["marketCapApprox"] = df["Close_MSTR"] * SHARES_OUTSTANDING
         df["btcNav"] = df["Close_BTC"] * BTC_HOLDINGS
         df["mnav"] = df["marketCapApprox"] / df["btcNav"]
 
         result = []
-        for idx, row in df.iterrows():
+        for _, row in df.iterrows():
             mnav_val = float(row["mnav"])
 
             if math.isnan(mnav_val) or math.isinf(mnav_val):
                 continue
 
             result.append({
-                "date": idx.strftime("%Y-%m-%d"),
+                "date": row["date"],
                 "mstr_close": round(float(row["Close_MSTR"]), 2),
                 "btc_close": round(float(row["Close_BTC"]), 2),
                 "market_cap_approx": round(float(row["marketCapApprox"]), 2),
