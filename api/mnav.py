@@ -31,27 +31,25 @@ COMPANIES = {
 CACHE = {}
 CACHE_TTL = 1800  # 30 分鐘
 
-def safe_history(ticker: str, period: str, interval: str, retries: int = 3, sleep_sec: int = 2):
-    last_error = None
+import requests
 
+# 建立一個具有 User-Agent 的 Session
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
+})
+
+def safe_history(ticker: str, period: str, interval: str, retries: int = 3):
+    # 將 session 傳入 Ticker
+    t = yf.Ticker(ticker, session=session)
     for i in range(retries):
         try:
-            df = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=False)
-            print(f"[DEBUG] {ticker} attempt {i+1}, rows={len(df)}")
-
+            df = t.history(period=period, interval=interval, auto_adjust=False)
             if not df.empty:
                 return df
         except Exception as e:
-            last_error = e
-            print(f"[ERROR] {ticker} attempt {i+1}: {e}")
-
-        time.sleep(sleep_sec)
-
-    if last_error:
-        print(f"[FINAL ERROR] {ticker}: {last_error}")
-    else:
-        print(f"[FINAL ERROR] {ticker}: empty history after retries")
-
+            print(f"Error fetching {ticker}: {e}")
+        time.sleep(1)
     return pd.DataFrame()
 
 def get_btc_history(period: str, interval: str):
