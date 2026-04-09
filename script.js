@@ -11,6 +11,7 @@ async function fetchDashboardData() {
   return data;
 }
 
+
 async function loadSummary(companyData) {
   const summaryBox = document.getElementById("aiSummary");
   const cacheKey = `${companyData.company}-${companyData.latest.date}`;
