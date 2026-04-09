@@ -2,4 +2,3 @@ fastapi
 yfinance
 pandas
 google-genai
-requests

@@ -39,17 +39,27 @@ session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
 })
 
-def safe_history(ticker: str, period: str, interval: str, retries: int = 3):
-    # 將 session 傳入 Ticker
-    t = yf.Ticker(ticker, session=session)
+def safe_history(ticker: str, period: str, interval: str, retries: int = 3, sleep_sec: int = 2):
+    last_error = None
+
     for i in range(retries):
         try:
-            df = t.history(period=period, interval=interval, auto_adjust=False)
+            # 💡 修正點：移除 session=session，直接呼叫
+            # 如果你真的想優化，yfinance 現在內部會處理指紋
+            ticker_obj = yf.Ticker(ticker)
+            df = ticker_obj.history(period=period, interval=interval, auto_adjust=False)
+            
+            print(f"[DEBUG] {ticker} attempt {i+1}, rows={len(df)}")
+
             if not df.empty:
                 return df
         except Exception as e:
-            print(f"Error fetching {ticker}: {e}")
-        time.sleep(1)
+            last_error = e
+            print(f"[ERROR] {ticker} attempt {i+1}: {e}")
+
+        time.sleep(sleep_sec)
+
+    print(f"[FINAL ERROR] {ticker}: {last_error if last_error else 'empty history'}")
     return pd.DataFrame()
 
 def get_btc_history(period: str, interval: str):
