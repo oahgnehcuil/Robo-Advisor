@@ -54,6 +54,17 @@ def safe_history(ticker: str, period: str, interval: str, retries: int = 3, slee
 
     return pd.DataFrame()
 
+def get_btc_history(period: str, interval: str):
+    btc_tickers = ["BTC-USD", "BTCUSD=X"]
+
+    for ticker in btc_tickers:
+        df = safe_history(ticker, period, interval)
+        if not df.empty:
+            print(f"[INFO] Using BTC ticker: {ticker}")
+            return df
+
+    return pd.DataFrame()
+
 def normalize_time_column(df: pd.DataFrame, time_col: str, interval: str) -> pd.DataFrame:
     df = df.copy()
     ts = pd.to_datetime(df[time_col], utc=True).dt.tz_convert(None)
@@ -156,7 +167,7 @@ def get_all_mnav(
             if now - cached_entry["timestamp"] < CACHE_TTL:
                 return cached_entry["data"]
 
-        btc_hist = safe_history("BTC-USD", period, interval)
+        btc_hist = get_btc_history(period, interval)
 
         if btc_hist.empty:
             if cache_key in CACHE:
