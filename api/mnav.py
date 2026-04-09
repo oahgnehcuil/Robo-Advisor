@@ -31,27 +31,28 @@ COMPANIES = {
 CACHE = {}
 CACHE_TTL = 1800  # 30 分鐘
 
-
 def safe_history(ticker: str, period: str, interval: str, retries: int = 3, sleep_sec: int = 2):
     last_error = None
 
-    for _ in range(retries):
+    for i in range(retries):
         try:
-            df = yf.Ticker(ticker).history(period=period, interval=interval)
+            df = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=False)
+            print(f"[DEBUG] {ticker} attempt {i+1}, rows={len(df)}")
+
             if not df.empty:
                 return df
         except Exception as e:
             last_error = e
+            print(f"[ERROR] {ticker} attempt {i+1}: {e}")
 
         time.sleep(sleep_sec)
 
     if last_error:
-        print(f"[ERROR] {ticker}: {last_error}")
+        print(f"[FINAL ERROR] {ticker}: {last_error}")
     else:
-        print(f"[ERROR] {ticker}: empty history after retries")
+        print(f"[FINAL ERROR] {ticker}: empty history after retries")
 
     return pd.DataFrame()
-
 
 def normalize_time_column(df: pd.DataFrame, time_col: str, interval: str) -> pd.DataFrame:
     df = df.copy()
