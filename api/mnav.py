@@ -31,21 +31,12 @@ COMPANIES = {
 CACHE = {}
 CACHE_TTL = 1800  # 30 分鐘
 
-import requests
-
-# 建立一個具有 User-Agent 的 Session
-session = requests.Session()
-session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
-})
 
 def safe_history(ticker: str, period: str, interval: str, retries: int = 3, sleep_sec: int = 2):
     last_error = None
 
     for i in range(retries):
         try:
-            # 💡 修正點：移除 session=session，直接呼叫
-            # 如果你真的想優化，yfinance 現在內部會處理指紋
             ticker_obj = yf.Ticker(ticker)
             df = ticker_obj.history(period=period, interval=interval, auto_adjust=False)
             
