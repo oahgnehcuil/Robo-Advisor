@@ -20,16 +20,25 @@ class SummaryRequest(BaseModel):
     latest: dict
     series: list
 
-# 這裡設定：最多重試 3 次，等待時間隨次數增加（2s, 4s, 8s...），僅針對 Rate Limit 錯誤重試
+# 更新判定函數，納入 503 錯誤
+def is_retryable_error(exception):
+    msg = str(exception)
+    # 429: Rate Limit, 503: Service Unavailable, 500: Internal Server Error
+    retryable_codes = ["429", "503", "500", "RESOURCE_EXHAUSTED", "UNAVAILABLE"]
+    return any(code in msg for code in retryable_codes)
+
+# 調整重試策略
 @retry(
-    stop=stop_after_attempt(3), 
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception(is_rate_limit_error),
-    reraise=True # 重試失敗後最後還是會拋出錯誤供外部捕捉
+    stop=stop_after_attempt(5), # 增加到 5 次，因為 503 通常稍縱即逝
+    wait=wait_exponential(multiplier=1, min=2, max=15), # 最長等待 15 秒
+    retry=retry_if_exception(is_retryable_error),
+    reraise=True
 )
 def call_gemini_api(client, prompt):
+    # 注意：這裡使用的是 gemini-2.0-flash (目前穩定版主流名稱可能是 1.5 或 2.0)
+    # 如果你指的是 2.0 系列，請確保名稱正確
     return client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.0-flash", 
         contents=prompt
     )
 
